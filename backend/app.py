@@ -26,7 +26,11 @@ os.makedirs(TIMESERIES_CACHE_DIR, exist_ok=True)
 
 app = Flask(__name__, static_url_path='/static')
 
-CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "https://*.vercel.app", "https://*.v0.app", "https://terratales.earth"]}})
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:3000", "https://*.vercel.app", "https://*.v0.app", "https://terratales.earth"]
+    }
+})
 
 @app.route('/cache/thumbs/<path:filename>')
 def serve_cached_thumb(filename):
@@ -40,12 +44,9 @@ def cache_thumb_from_url(thumb_url):
         fname = f"thumb_{h}.png"
         fpath = os.path.join(THUMB_CACHE_DIR, fname)
         
-        # --- CAMBIO CLAVE AQUÍ ---
-        # Render provee la variable 'RENDER_EXTERNAL_URL' con la URL pública del servicio.
-        # Si no existe (porque estamos en local), usamos 'localhost:5000' como alternativa.
+        # Detecta si estamos en Render y usa la URL pública, si no, usa la local.
         backend_url = os.getenv('RENDER_EXTERNAL_URL', 'http://localhost:5000')
         full_url = f"{backend_url}/cache/thumbs/{fname}"
-        # --- FIN DEL CAMBIO ---
 
         if os.path.exists(fpath):
             return full_url
@@ -63,6 +64,30 @@ def cache_thumb_from_url(thumb_url):
     except Exception as e:
         print(f"⚠️ cache_thumb_from_url error: {e}")
         return None
+
+def timeseries_cache_path(region, index):
+    safe = f"{region}_{index}".replace("/", "_")
+    return os.path.join(TIMESERIES_CACHE_DIR, f"{safe}.json")
+
+def read_timeseries_cache(region, index):
+    path = timeseries_cache_path(region, index)
+    if not os.path.exists(path): return None
+    try:
+        with open(path, 'r', encoding='utf-8') as f: return json.load(f)
+    except Exception as e:
+        print("⚠️ Error reading timeseries cache:", e)
+        return None
+
+def write_timeseries_cache(region, index, data):
+    path = timeseries_cache_path(region, index)
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f: json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, path)
+        return True
+    except Exception as e:
+        print("⚠️ Error writing timeseries cache:", e)
+        return False
 
 @app.route('/')
 def index_route(): 
@@ -126,22 +151,70 @@ def get_timeseries():
     try:
         region = request.args.get('region')
         index = request.args.get('index')
-        if not region or not index: return jsonify({'error': 'Missing parameters'}), 400
+        force = request.args.get('force', 'false').lower() == 'true'
+        start_year = int(request.args.get('start', 1990))
+        end_year = int(request.args.get('end', 2025))
+        if region not in REGIONS: return jsonify({'error': 'Invalid region.'}), 400
+        if index not in ('ndvi', 'ndsi', 'ndbi'): return jsonify({'error': 'Invalid index.'}), 400
+        cache = None
+        if not force:
+            cache = read_timeseries_cache(region, index)
+            if cache and ('years' in cache):
+                years_cached = cache.get('years', [])
+                if years_cached and int(years_cached[0]) <= start_year and int(years_cached[-1]) >= end_year:
+                    cache['cached'] = True
+                    return jsonify(cache)
         
-        region_geom = ee.Geometry.Rectangle(REGIONS[region])
-        # ... (resto de la lógica de timeseries)
+        region_coords = REGIONS[region]
+        region_geom = ee.Geometry.Rectangle(region_coords)
         
-        # Simulación de respuesta para brevedad
-        years = list(range(1990, 2026))
-        import random
-        values = [random.uniform(0.1, 0.8) for _ in years]
-        result = {'years': years, 'values': values, 'cached': False}
+        years = list(range(start_year, end_year + 1))
+        values = []
+        for year in years:
+            try:
+                if index == 'ndvi': img, band = compute_ndvi(region_geom, year), 'NDVI'
+                elif index == 'ndsi': img, band = compute_ndsi(region_geom, year), 'NDSI'
+                elif index == 'ndbi': img, band = compute_ndbi(region_geom, year), 'NDBI'
+                else: return jsonify({'error': 'Invalid index.'}), 400
+                mean_dict = img.reduceRegion(reducer=ee.Reducer.mean(), geometry=region_geom, scale=30, maxPixels=1e9)
+                mv = None
+                try:
+                    mv_obj = mean_dict.get(band)
+                    mv = mv_obj.getInfo() if mv_obj else None
+                except Exception: mv = None
+                values.append(mv)
+            except Exception as e_year:
+                print(f"⚠️ Error year {year} region {region} index {index}:", e_year)
+                values.append(None)
+        result = {'years': years, 'values': values, 'cached': False, 'ts': int(time.time())}
+        try: write_timeseries_cache(region, index, result)
+        except Exception as e: print("⚠️ Could not write_timeseries_cache:", e)
         return jsonify(result)
-
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/tile_proxy/<mapid>/<int:z>/<int:x>/<int:y>.png')
+def tile_proxy(mapid, z, x, y):
+    try:
+        safe_mapid, token = str(mapid), request.args.get('token')
+        if not token: return Response("Token is missing", status=400)
+        remote_url = f"https://earthengine.googleapis.com/map/{safe_mapid}/tiles/{z}/{x}/{y}?token={token}"
+        local_dir = os.path.join(TILE_CACHE_DIR, safe_mapid, str(z), str(x))
+        os.makedirs(local_dir, exist_ok=True)
+        local_file = os.path.join(local_dir, f"{y}.png")
+        if os.path.exists(local_file): return send_file(local_file, mimetype='image/png', conditional=True, cache_timeout=30*24*60*60)
+        resp = requests.get(remote_url, stream=True, timeout=30)
+        if resp.status_code == 200:
+            with open(local_file, 'wb') as f:
+                for chunk in resp.iter_content(1024*8): f.write(chunk)
+            return send_file(local_file, mimetype='image/png', conditional=True, cache_timeout=30*24*60*60)
+        else:
+            print(f"⚠️ tile_proxy: fetch {remote_url} status {resp.status_code}")
+            return Response(f"Tile fetch failed: {resp.status_code}", status=502)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

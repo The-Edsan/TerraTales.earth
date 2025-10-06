@@ -4,7 +4,14 @@ import requests
 import traceback
 import json
 import time
-
+# --- PRUEBA DE DIAGNÓSTICO ---
+print("--- Verificando variables de entorno ---")
+test_var = os.getenv('TEST_VAR')
+google_creds_var = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+print(f"Valor de TEST_VAR: {test_var}")
+print(f"Ruta de credenciales de Google: {google_creds_var}")
+print("------------------------------------")
+# --- FIN DE PRUEBA ---
 from flask import Flask, jsonify, request, send_file, Response, send_from_directory
 from flask_cors import CORS
 import ee

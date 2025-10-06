@@ -8,29 +8,28 @@ REGIONS = {
     "cdmx": [-99.3, 19.2, -98.9, 19.6]
 }
 
-# --- CAMBIO DEFINITIVO AQUÍ: Paletas y rangos ajustados a tu leyenda ---
 VIS = {
-    # NDVI (Manaos): Debe ir de Azul (poca vegetación) a Verde (mucha vegetación)
+    # --- CAMBIO AQUÍ: Ajustamos el 'min' de NDVI ---
+    # ANTES: "min": 0.0
+    # DESPUÉS: Le damos un rango negativo para que el agua no sature el color azul.
     "NDVI": {
-        "min": 0.0, 
+        "min": -0.2, 
         "max": 0.9,
         "palette": ['blue', 'green']
     },
-    # NDSI (Alaska): Debe ir de Rojo (poca nieve) a Cian (mucha nieve)
+    # --- FIN DE CAMBIO ---
+    
     "NDSI": {
         "min": 0.0, 
         "max": 0.8,
         "palette": ['red', 'cyan']
     },
-    # NDBI (CDMX): Debe ir de Azul (poca urbanización) a Amarillo (mucha urbanización)
     "NDBI": {
         "min": -0.3, 
         "max": 0.5,
         "palette": ['blue', 'yellow']
     }
 }
-# --- FIN DE CAMBIO ---
-
 
 def _rename_l57(img):
     return img.select(['SR_B1','SR_B2','SR_B3','SR_B4','SR_B5','SR_B7'],['BLUE','GREEN','RED','NIR','SWIR1','SWIR2'])

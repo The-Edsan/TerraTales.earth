@@ -3,35 +3,41 @@ import os
 import json
 import tempfile 
 
+# --- CAMBIO 1: Definimos los permisos (scopes) necesarios ---
+EE_SCOPES = [
+    'https://www.googleapis.com/auth/earthengine',
+    'https://www.googleapis.com/auth/cloud-platform'
+]
+# --- FIN DE CAMBIO ---
+
 def init_gee():
     """
     Inicializa Google Earth Engine.
-    Usa un archivo temporal y una variable de entorno en producción.
+    Usa un archivo temporal y scopes explícitos en producción.
     """
     try:
-        # Método 1: Producción (lee la variable de entorno y crea un archivo temporal)
+        # Método 1: Producción
         service_account_json_str = os.getenv('SERVICE_ACCOUNT_JSON')
         if service_account_json_str:
             print("✅ Found SERVICE_ACCOUNT_JSON. Setting up credentials via temporary file...")
             try:
-                # Creamos un archivo temporal y escribimos el contenido del JSON
                 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_creds_file:
                     temp_creds_file.write(service_account_json_str)
                     temp_file_path = temp_creds_file.name
                 
                 print(f"✅ Credentials written to temp file: {temp_file_path}")
 
-                # --- EL PASO CLAVE Y DEFINITIVO ---
-                # Le decimos al sistema operativo dónde encontrar nuestro archivo de credenciales.
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_file_path
-
-                # Ahora, inicializamos SIN PASARLE NADA. La librería buscará la variable
-                # de entorno que acabamos de crear y se autenticará automáticamente.
-                ee.Initialize()
-                # --- FIN DEL CAMBIO ---
+                creds = ee.ServiceAccountCredentials(
+                    account=None, # El email se lee desde el archivo
+                    key_file=temp_file_path
+                )
+                
+                # --- CAMBIO 2: Pasamos los scopes al inicializar ---
+                ee.Initialize(credentials=creds, opt_scopes=EE_SCOPES)
+                # --- FIN DE CAMBIO ---
                 
                 print("✅ Earth Engine initialized successfully in production mode.")
-                return 
+                return
             except Exception as e:
                 print(f"❌ Failed during production initialization: {e}")
                 raise e

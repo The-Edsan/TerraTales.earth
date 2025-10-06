@@ -2,43 +2,24 @@
 import ee
 from datetime import datetime
 
-# ==============================
-# STUDY REGIONS
-# ==============================
-# --- CAMBIO 1: Se definen las regiones como simples listas de coordenadas ---
-# Esto evita llamar a 'ee.Geometry' al importar el archivo.
 REGIONS = {
     "alaska": [-147.8, 61.0, -146.2, 61.6],
     "manaos": [-60.2, -3.3, -59.8, -2.9],
     "cdmx": [-99.3, 19.2, -98.9, 19.6]
 }
-# --- FIN DE CAMBIO ---
 
-# ==============================
-# VISUALIZATION
-# ==============================
 VIS = {
     "NDVI": {"min": -1, "max": 1, "palette": ['blue', 'green']},
     "NDSI": {"min": -1, "max": 1, "palette": ['red', 'cyan']},
     "NDBI": {"min": -1, "max": 1, "palette": ['blue', 'yellow']}
 }
 
-# (El resto del archivo no cambia hasta llegar a generate_tile_url)
-
 def _rename_l57(img):
-    return img.select(
-        ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7'],
-        ['BLUE', 'GREEN', 'RED', 'NIR', 'SWIR1', 'SWIR2']
-    )
-
+    return img.select(['SR_B1','SR_B2','SR_B3','SR_B4','SR_B5','SR_B7'],['BLUE','GREEN','RED','NIR','SWIR1','SWIR2'])
 def _rename_l8(img):
-    return img.select(
-        ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'SR_B7'],
-        ['BLUE', 'GREEN', 'RED', 'NIR', 'SWIR1', 'SWIR2']
-    )
+    return img.select(['SR_B2','SR_B3','SR_B4','SR_B5','SR_B6','SR_B7'],['BLUE','GREEN','RED','NIR','SWIR1','SWIR2'])
 
 def get_landsat_collection_for_period(region, start_date, end_date, cloud_thresh=40):
-    # ... (sin cambios en esta función)
     col5 = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2").filterBounds(region).filterDate(start_date, end_date).filter(ee.Filter.lt("CLOUD_COVER", cloud_thresh)).map(_rename_l57)
     col7 = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2").filterBounds(region).filterDate(start_date, end_date).filter(ee.Filter.lt("CLOUD_COVER", cloud_thresh)).map(_rename_l57)
     col8 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2").filterBounds(region).filterDate(start_date, end_date).filter(ee.Filter.lt("CLOUD_COVER", cloud_thresh)).map(_rename_l8)
@@ -46,7 +27,6 @@ def get_landsat_collection_for_period(region, start_date, end_date, cloud_thresh
     return col5.merge(col7).merge(col8).merge(col9)
 
 def _compose_from_collection(col, region, limit=5):
-    # ... (sin cambios en esta función)
     col_sorted = col.sort('CLOUD_COVER').limit(limit)
     size = col_sorted.size().getInfo()
     if size == 0: return None
@@ -57,7 +37,6 @@ def _compose_from_collection(col, region, limit=5):
     return img
 
 def get_image(region, year, cloud_thresh=40, limit=5, prefer_summer=False):
-    # ... (sin cambios en esta función)
     if prefer_summer: start, end = f"{year}-06-01", f"{year}-08-31"
     else: start, end = f"{year}-01-01", f"{year}-12-31"
     col = get_landsat_collection_for_period(region, start, end, cloud_thresh)
@@ -82,7 +61,6 @@ def compute_ndbi(region, year, **kwargs):
     return img.normalizedDifference(['SWIR1', 'NIR']).rename('NDBI')
 
 def generar_thumb_url_from_img(img, region, vis, dimensions=512):
-    # ... (sin cambios en esta función)
     params = {'min': vis['min'], 'max': vis['max'], 'palette': vis['palette'], 'region': region.bounds().getInfo(), 'dimensions': dimensions, 'format': 'png'}
     return img.getThumbURL(params)
 
@@ -91,10 +69,8 @@ def generate_tile_url(index, region_name, year, thumb_dimensions=256, scale=60, 
     if region_name not in REGIONS:
         raise ValueError(f"Region '{region_name}' is not valid.")
     
-    # --- CAMBIO 2: Se convierte la lista de coordenadas a una Geometría aquí ---
     region_coords = REGIONS[region_name]
     region = ee.Geometry.Rectangle(region_coords)
-    # --- FIN DE CAMBIO ---
 
     if index == "ndvi": img = compute_ndvi(region, year, prefer_summer=prefer_summer, limit=limit)
     elif index == "ndsi": img = compute_ndsi(region, year, prefer_summer=prefer_summer, limit=limit)
@@ -106,22 +82,26 @@ def generate_tile_url(index, region_name, year, thumb_dimensions=256, scale=60, 
     try: mapid_dict = img.getMapId({'min': vis['min'], 'max': vis['max'], 'palette': vis['palette'], 'scale': scale})
     except Exception as e: raise RuntimeError(f"Error generating mapid (tiles): {e}")
 
-    # (El resto de la función no necesita cambios)
     tile_url, mapid, token = None, None, None
     try:
         if isinstance(mapid_dict, dict):
             tf = mapid_dict.get('tile_fetcher'); mapid = mapid_dict.get('mapid'); token = mapid_dict.get('token')
             if tf and hasattr(tf, 'url_format'): tile_url = tf.url_format
             if not tile_url and mapid and token: tile_url = f"https://earthengine.googleapis.com/map/{mapid}/{{z}}/{{x}}/{{y}}?token={token}"
-        else:
-            try:
-                tf = getattr(mapid_dict, 'tile_fetcher', None)
-                if tf and hasattr(tf, 'url_format'): tile_url = tf.url_format
-            except Exception: tile_url = None
-    except Exception: tile_url = None
+    except Exception: pass
+    
     try: thumb_url = generar_thumb_url_from_img(img, region, vis, dimensions=thumb_dimensions)
     except Exception: thumb_url = None
-    try: bbox = region.bounds().getInfo()
-    except Exception: bbox = None
+
+    # --- CAMBIO AQUÍ: Generamos el bbox en el formato simple que Leaflet necesita ---
+    try:
+        coords = region.bounds().getInfo()['coordinates'][0]
+        lons = [c[0] for c in coords]
+        lats = [c[1] for c in coords]
+        # Formato: [[lat_sur, lon_oeste], [lat_norte, lon_este]]
+        bbox = [[min(lats), min(lons)], [max(lats), max(lons)]]
+    except Exception:
+        bbox = None
+    # --- FIN DE CAMBIO ---
     
     return {'tile_url': tile_url, 'url': thumb_url, 'bbox': bbox, 'mapid': mapid, 'token': token}

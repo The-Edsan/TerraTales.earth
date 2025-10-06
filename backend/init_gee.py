@@ -1,25 +1,30 @@
 import ee
 import os
-import json
 
 def init_gee():
     """
-    Inicializa Google Earth Engine con credenciales locales y el proyecto correcto.
+    Inicializa Google Earth Engine.
+    Prioriza las credenciales de producción (Secret File en Render)
+    y usa la autenticación local como alternativa para desarrollo.
     """
     try:
-        credentials_path = os.path.expanduser("~/.config/earthengine/credentials")
-        if not os.path.exists(credentials_path):
-            print("⚠️ No se encontraron credenciales locales. Ejecuta:")
-            print("   earthengine authenticate")
-            return
-
-        with open(credentials_path) as f:
-            creds = json.load(f)
-        project_id = creds.get("project", "banded-object-293822")
-
-        ee.Initialize(project=project_id)
-        print(f"✅ Earth Engine inicializado correctamente con el proyecto: {project_id}")
+        # Verificamos si estamos en un entorno de producción como Render
+        # Render crea automáticamente la variable de entorno GOOGLE_APPLICATION_CREDENTIALS
+        # cuando se configura un "Secret File".
+        if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+            print("✅ Production credentials found. Initializing Earth Engine...")
+            # La librería de 'ee' detecta la variable de entorno automáticamente.
+            # No necesitamos pasarle nada.
+            ee.Initialize()
+            print("✅ Earth Engine initialized successfully in production mode.")
+        else:
+            # Si no, usamos el método de autenticación local para desarrollo
+            print("⚠️ No production credentials found. Falling back to local authentication...")
+            # Este es el flujo que usas en tu PC
+            ee.Initialize()
+            print("✅ Earth Engine initialized with local credentials.")
 
     except Exception as e:
-        print(f"❌ Error al inicializar Earth Engine: {e}")
-        raise
+        print(f"❌ Failed to initialize Earth Engine: {e}")
+        # Es importante lanzar la excepción para que el servidor falle y te muestre el error
+        raise e

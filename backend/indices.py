@@ -8,22 +8,25 @@ REGIONS = {
     "cdmx": [-99.3, 19.2, -98.9, 19.6]
 }
 
-# --- CAMBIO AQUÍ: Valores de VIS ajustados para mejor visualización ---
+# --- CAMBIO DEFINITIVO AQUÍ: Paletas y rangos ajustados a tu leyenda ---
 VIS = {
+    # NDVI (Manaos): Debe ir de Azul (poca vegetación) a Verde (mucha vegetación)
     "NDVI": {
-        "min": -0.2,  # Rango más común para NDVI: -1 (agua) a 1 (vegetación densa). -0.2 a 0.8 es un buen rango visual.
-        "max": 0.8,
-        "palette": ['red', 'orange', 'yellow', 'lightgreen', 'green', 'darkgreen'] # Paleta más intuitiva para vegetación
+        "min": 0.0, 
+        "max": 0.9,
+        "palette": ['blue', 'green']
     },
+    # NDSI (Alaska): Debe ir de Rojo (poca nieve) a Cian (mucha nieve)
     "NDSI": {
-        "min": 0.0,   # NDSI típicamente va de 0 a 1 para nieve/hielo. Evitamos negativos si no hay interés en "no nieve".
-        "max": 1.0,
-        "palette": ['brown', 'tan', 'white', 'lightblue', 'blue'] # Colores que van de tierra a nieve/agua
+        "min": 0.0, 
+        "max": 0.8,
+        "palette": ['red', 'cyan']
     },
+    # NDBI (CDMX): Debe ir de Azul (poca urbanización) a Amarillo (mucha urbanización)
     "NDBI": {
-        "min": -0.1,  # NDBI también puede tener valores negativos (agua) a positivos (áreas urbanas).
-        "max": 0.5,   # Un rango de -0.1 a 0.5 suele resaltar bien las zonas construidas.
-        "palette": ['blue', 'gray', 'yellow', 'red'] # Paleta para resaltar zonas urbanas
+        "min": -0.3, 
+        "max": 0.5,
+        "palette": ['blue', 'yellow']
     }
 }
 # --- FIN DE CAMBIO ---

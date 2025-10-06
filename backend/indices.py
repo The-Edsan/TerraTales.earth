@@ -8,11 +8,26 @@ REGIONS = {
     "cdmx": [-99.3, 19.2, -98.9, 19.6]
 }
 
+# --- CAMBIO AQUÍ: Valores de VIS ajustados para mejor visualización ---
 VIS = {
-    "NDVI": {"min": -1, "max": 1, "palette": ['blue', 'green']},
-    "NDSI": {"min": -1, "max": 1, "palette": ['red', 'cyan']},
-    "NDBI": {"min": -1, "max": 1, "palette": ['blue', 'yellow']}
+    "NDVI": {
+        "min": -0.2,  # Rango más común para NDVI: -1 (agua) a 1 (vegetación densa). -0.2 a 0.8 es un buen rango visual.
+        "max": 0.8,
+        "palette": ['red', 'orange', 'yellow', 'lightgreen', 'green', 'darkgreen'] # Paleta más intuitiva para vegetación
+    },
+    "NDSI": {
+        "min": 0.0,   # NDSI típicamente va de 0 a 1 para nieve/hielo. Evitamos negativos si no hay interés en "no nieve".
+        "max": 1.0,
+        "palette": ['brown', 'tan', 'white', 'lightblue', 'blue'] # Colores que van de tierra a nieve/agua
+    },
+    "NDBI": {
+        "min": -0.1,  # NDBI también puede tener valores negativos (agua) a positivos (áreas urbanas).
+        "max": 0.5,   # Un rango de -0.1 a 0.5 suele resaltar bien las zonas construidas.
+        "palette": ['blue', 'gray', 'yellow', 'red'] # Paleta para resaltar zonas urbanas
+    }
 }
+# --- FIN DE CAMBIO ---
+
 
 def _rename_l57(img):
     return img.select(['SR_B1','SR_B2','SR_B3','SR_B4','SR_B5','SR_B7'],['BLUE','GREEN','RED','NIR','SWIR1','SWIR2'])
@@ -93,15 +108,12 @@ def generate_tile_url(index, region_name, year, thumb_dimensions=256, scale=60, 
     try: thumb_url = generar_thumb_url_from_img(img, region, vis, dimensions=thumb_dimensions)
     except Exception: thumb_url = None
 
-    # --- CAMBIO AQUÍ: Generamos el bbox en el formato simple que Leaflet necesita ---
     try:
         coords = region.bounds().getInfo()['coordinates'][0]
         lons = [c[0] for c in coords]
         lats = [c[1] for c in coords]
-        # Formato: [[lat_sur, lon_oeste], [lat_norte, lon_este]]
         bbox = [[min(lats), min(lons)], [max(lats), max(lons)]]
     except Exception:
         bbox = None
-    # --- FIN DE CAMBIO ---
     
     return {'tile_url': tile_url, 'url': thumb_url, 'bbox': bbox, 'mapid': mapid, 'token': token}

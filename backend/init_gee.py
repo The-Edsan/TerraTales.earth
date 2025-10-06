@@ -1,32 +1,38 @@
 import ee
 import os
 import json
+import tempfile # Importamos la librería para crear archivos temporales
 
 def init_gee():
     """
     Inicializa Google Earth Engine.
-    Prioriza las credenciales de producción desde la variable de entorno SERVICE_ACCOUNT_JSON.
+    Usa un archivo temporal para las credenciales en producción.
     """
     try:
-        # Método 1: Producción (lee la variable de entorno con el JSON)
+        # Método 1: Producción (lee la variable de entorno y la escribe en un archivo temporal)
         service_account_json_str = os.getenv('SERVICE_ACCOUNT_JSON')
         if service_account_json_str:
-            print("✅ Found SERVICE_ACCOUNT_JSON environment variable. Initializing Earth Engine...")
+            print("✅ Found SERVICE_ACCOUNT_JSON. Writing to temp file for authentication...")
             try:
-                creds_info = json.loads(service_account_json_str)
+                # Creamos un archivo temporal y escribimos el contenido del JSON en él
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_creds_file:
+                    temp_creds_file.write(service_account_json_str)
+                    temp_file_path = temp_creds_file.name
                 
-                # --- CAMBIO AQUÍ: Usamos los nombres de parámetros correctos ---
+                print(f"✅ Credentials written to temporary file: {temp_file_path}")
+
+                # Ahora, inicializamos Earth Engine usando la ruta de ese archivo temporal
+                # Este es el método de autenticación más estándar y robusto
                 creds = ee.ServiceAccountCredentials(
-                    creds_info['client_email'],    # El email es el primer argumento, sin nombre de parámetro
-                    key=creds_info['private_key']  # El nombre del parámetro es 'key', no 'key_data'
+                    account='', # El email se lee desde el archivo
+                    key_file=temp_file_path
                 )
-                # --- FIN DE CAMBIO ---
-                
                 ee.Initialize(credentials=creds)
+                
                 print("✅ Earth Engine initialized successfully in production mode.")
-                return 
+                return # Termina la función exitosamente
             except Exception as e:
-                print(f"❌ Failed to parse or use SERVICE_ACCOUNT_JSON: {e}")
+                print(f"❌ Failed during temporary credential file setup: {e}")
                 raise e
         
         # Método 2: Fallback para desarrollo local (si la variable de arriba no existe)

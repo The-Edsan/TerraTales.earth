@@ -13,19 +13,18 @@ def init_gee():
         if service_account_json_str:
             print("✅ Found SERVICE_ACCOUNT_JSON environment variable. Initializing Earth Engine...")
             try:
-                # Parsea el string JSON a un diccionario de Python
                 creds_info = json.loads(service_account_json_str)
                 
-                # Crea las credenciales a partir de la información del JSON
+                # --- CAMBIO AQUÍ: Usamos los nombres de parámetros correctos ---
                 creds = ee.ServiceAccountCredentials(
-                    client_email=creds_info['client_email'], 
-                    key_data=creds_info['private_key']
+                    creds_info['client_email'],    # El email es el primer argumento, sin nombre de parámetro
+                    key=creds_info['private_key']  # El nombre del parámetro es 'key', no 'key_data'
                 )
+                # --- FIN DE CAMBIO ---
                 
-                # Inicializa Earth Engine con estas credenciales
                 ee.Initialize(credentials=creds)
                 print("✅ Earth Engine initialized successfully in production mode.")
-                return # Termina la función exitosamente
+                return 
             except Exception as e:
                 print(f"❌ Failed to parse or use SERVICE_ACCOUNT_JSON: {e}")
                 raise e

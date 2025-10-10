@@ -63,11 +63,29 @@ def cache_thumb_from_url(thumb_url):
         print(f"⚠️ cache_thumb_from_url error: {e}")
         return None
 
-# (El resto de funciones auxiliares y endpoints se mantienen igual, pero los incluyo para que sea copiar y pegar)
 def timeseries_cache_path(region, index):
     safe = f"{region}_{index}".replace("/", "_")
     return os.path.join(TIMESERIES_CACHE_DIR, f"{safe}.json")
-# ... (otras funciones auxiliares) ...
+
+def read_timeseries_cache(region, index):
+    path = timeseries_cache_path(region, index)
+    if not os.path.exists(path): return None
+    try:
+        with open(path, 'r', encoding='utf-8') as f: return json.load(f)
+    except Exception as e:
+        print("⚠️ Error reading timeseries cache:", e)
+        return None
+
+def write_timeseries_cache(region, index, data):
+    path = timeseries_cache_path(region, index)
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f: json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, path)
+        return True
+    except Exception as e:
+        print("⚠️ Error writing timeseries cache:", e)
+        return False
 
 @app.route('/')
 def index_route(): 
@@ -108,10 +126,6 @@ def get_image():
                 return jsonify({'error': 'no_images', 'message': msg, 'apology': "Sorry — no images available for that date/region."}), 404
             return jsonify({'error': str(e_gen)}), 500
 
-        # --- CAMBIO AQUÍ: Eliminamos el bloque de normalización de bbox, ya no es necesario ---
-        # El código que estaba aquí para procesar el 'bbox' se ha eliminado.
-        # --- FIN DE CAMBIO ---
-
         thumb_remote = tile_data.get('url')
         if thumb_remote:
             cached_url = cache_thumb_from_url(thumb_remote)
@@ -132,7 +146,6 @@ def get_image():
 
 @app.route('/get_timeseries')
 def get_timeseries():
-    # ... (esta función se mantiene igual que en la versión anterior) ...
     try:
         region = request.args.get('region')
         index = request.args.get('index')

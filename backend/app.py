@@ -163,7 +163,27 @@ def get_timeseries():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-# (tile_proxy no necesita cambios)
+@app.route('/tile_proxy/<mapid>/<int:z>/<int:x>/<int:y>.png')
+def tile_proxy(mapid, z, x, y):
+    try:
+        safe_mapid, token = str(mapid), request.args.get('token')
+        if not token: return Response("Token is missing", status=400)
+        remote_url = f"https://earthengine.googleapis.com/map/{safe_mapid}/tiles/{z}/{x}/{y}?token={token}"
+        local_dir = os.path.join(TILE_CACHE_DIR, safe_mapid, str(z), str(x))
+        os.makedirs(local_dir, exist_ok=True)
+        local_file = os.path.join(local_dir, f"{y}.png")
+        if os.path.exists(local_file): return send_file(local_file, mimetype='image/png', conditional=True, cache_timeout=30*24*60*60)
+        resp = requests.get(remote_url, stream=True, timeout=30)
+        if resp.status_code == 200:
+            with open(local_file, 'wb') as f:
+                for chunk in resp.iter_content(1024*8): f.write(chunk)
+            return send_file(local_file, mimetype='image/png', conditional=True, cache_timeout=30*24*60*60)
+        else:
+            print(f"⚠️ tile_proxy: fetch {remote_url} status {resp.status_code}")
+            return Response(f"Tile fetch failed: {resp.status_code}", status=502)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
